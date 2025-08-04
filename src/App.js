@@ -1,8 +1,115 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, User, Monitor, Smartphone, HardDrive, ArrowRightLeft, Download, FileUp, UserX, LogOut, Eye, Lock, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, User, Monitor, Smartphone, HardDrive, ArrowRightLeft, Download, FileUp, UserX, LogOut, Eye, Lock, FileSpreadsheet, History, Database } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+// IndexedDB helper functions
+class AssetDB {
+  constructor() {
+    this.dbName = 'AssetManagementDB';
+    this.version = 1;
+    this.db = null;
+  }
+
+  async init() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.version);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve(this.db);
+      };
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        
+        // Create assets store
+        if (!db.objectStoreNames.contains('assets')) {
+          const assetStore = db.createObjectStore('assets', { keyPath: 'id' });
+          assetStore.createIndex('custodian', 'custodian', { unique: false });
+          assetStore.createIndex('serialNumber', 'serialNumber', { unique: false });
+          assetStore.createIndex('status', 'status', { unique: false });
+        }
+        
+        // Create users store
+        if (!db.objectStoreNames.contains('users')) {
+          const userStore = db.createObjectStore('users', { keyPath: 'username' });
+        }
+      };
+    });
+  }
+
+  async getAllAssets() {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['assets'], 'readonly');
+      const store = transaction.objectStore('assets');
+      const request = store.getAll();
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async addAsset(asset) {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['assets'], 'readwrite');
+      const store = transaction.objectStore('assets');
+      const request = store.add(asset);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async updateAsset(asset) {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['assets'], 'readwrite');
+      const store = transaction.objectStore('assets');
+      const request = store.put(asset);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async deleteAsset(id) {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['assets'], 'readwrite');
+      const store = transaction.objectStore('assets');
+      const request = store.delete(id);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async addUser(user) {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['users'], 'readwrite');
+      const store = transaction.objectStore('users');
+      const request = store.add(user);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getUser(username) {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db.transaction(['users'], 'readonly');
+      const store = transaction.objectStore('users');
+      const request = store.get(username);
+      
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+}
+
 function App() {
+  const [db, setDb] = useState(null);
+  const [dbStatus, setDbStatus] = useState('initializing');
+  
   // Authentication state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState('');
@@ -16,15 +123,8 @@ function App() {
     hr: { password: 'hr123', role: 'hr', name: 'HR Manager' }
   };
 
-  const [assets, setAssets] = useState([
-    { id: 1, custodian: 'Trish Syokau', serialNumber: 'D61F4M2', specs: 'Dell XPS 13', category: 'Laptop', status: 'Active', price: 86000, previousOwner: '' },
-    { id: 2, custodian: 'Sharon Wala', serialNumber: '5CG720103X', specs: 'HP EliteBook x360 1030 G2', category: 'Laptop', status: 'Active', price: 82000, previousOwner: 'Cynthia Mumbi' },
-    { id: 3, custodian: 'Jackie Maina', serialNumber: '5CG726102X', specs: 'HP-ENVY', category: 'Laptop', status: 'Active', price: 110000, previousOwner: '' },
-    { id: 4, custodian: 'Francis Kanja', serialNumber: 'G2QG632KVT', specs: 'MacBook Pro 16" 18 GB RAM 512 GB', category: 'Laptop', status: 'Active', price: 300000, previousOwner: '' },
-    { id: 5, custodian: 'Eric', serialNumber: '5CG726102X', specs: 'HP-ENVY', category: 'Laptop', status: 'Returned', price: 86000, previousOwner: '' }
-  ]);
-
-  const [filteredAssets, setFilteredAssets] = useState(assets);
+  const [assets, setAssets] = useState([]);
+  const [filteredAssets, setFilteredAssets] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -34,6 +134,8 @@ function App() {
   const [transferAsset, setTransferAsset] = useState(null);
   const [showEmployeeExitModal, setShowEmployeeExitModal] = useState(false);
   const [exitingEmployee, setExitingEmployee] = useState('');
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedAssetHistory, setSelectedAssetHistory] = useState(null);
 
   const categories = ['All', 'Laptop', 'Phone', 'Monitor', 'Peripheral', 'Other'];
   const statuses = ['All', 'Active', 'Returned', 'Dead', 'Under Repair'];
@@ -51,8 +153,105 @@ function App() {
   const [transferData, setTransferData] = useState({
     newCustodian: '',
     transferDate: new Date().toISOString().split('T')[0],
+    reason: '',
     notes: ''
   });
+
+  // Initialize IndexedDB
+  useEffect(() => {
+    const initializeDB = async () => {
+      try {
+        const assetDB = new AssetDB();
+        await assetDB.init();
+        setDb(assetDB);
+        
+        // Load existing assets from DB
+        const existingAssets = await assetDB.getAllAssets();
+        
+        if (existingAssets.length === 0) {
+          // If no assets exist, add sample data
+          const sampleAssets = [
+            { 
+              id: 1, 
+              custodian: 'Trish Syokau', 
+              serialNumber: 'D61F4M2', 
+              specs: 'Dell XPS 13', 
+              category: 'Laptop', 
+              status: 'Active', 
+              price: 86000, 
+              previousOwner: '',
+              transferHistory: [],
+              createdAt: new Date().toISOString()
+            },
+            { 
+              id: 2, 
+              custodian: 'Sharon Wala', 
+              serialNumber: '5CG720103X', 
+              specs: 'HP EliteBook x360 1030 G2', 
+              category: 'Laptop', 
+              status: 'Active', 
+              price: 82000, 
+              previousOwner: 'Cynthia Mumbi',
+              transferHistory: [
+                { from: 'Cynthia Mumbi', to: 'Sharon Wala', date: '2024-01-15', reason: 'Department transfer', transferredBy: 'Administrator' }
+              ],
+              createdAt: new Date().toISOString()
+            },
+            { 
+              id: 3, 
+              custodian: 'Jackie Maina', 
+              serialNumber: '5CG726102X', 
+              specs: 'HP-ENVY', 
+              category: 'Laptop', 
+              status: 'Active', 
+              price: 110000, 
+              previousOwner: '',
+              transferHistory: [],
+              createdAt: new Date().toISOString()
+            },
+            { 
+              id: 4, 
+              custodian: 'Francis Kanja', 
+              serialNumber: 'G2QG632KVT', 
+              specs: 'MacBook Pro 16" 18 GB RAM 512 GB', 
+              category: 'Laptop', 
+              status: 'Active', 
+              price: 300000, 
+              previousOwner: '',
+              transferHistory: [],
+              createdAt: new Date().toISOString()
+            },
+            { 
+              id: 5, 
+              custodian: 'Eric', 
+              serialNumber: '5CG726102X', 
+              specs: 'HP-ENVY', 
+              category: 'Laptop', 
+              status: 'Returned', 
+              price: 86000, 
+              previousOwner: '',
+              transferHistory: [],
+              createdAt: new Date().toISOString()
+            }
+          ];
+          
+          for (const asset of sampleAssets) {
+            await assetDB.addAsset(asset);
+          }
+          setAssets(sampleAssets);
+        } else {
+          setAssets(existingAssets);
+        }
+        
+        setDbStatus('connected');
+      } catch (error) {
+        console.error('Database initialization failed:', error);
+        setDbStatus('error');
+      }
+    };
+
+    initializeDB();
+  }, []);
 
   // Login function
   const handleLogin = (e) => {
@@ -117,7 +316,8 @@ function App() {
       filtered = filtered.filter(asset =>
         asset.custodian.toLowerCase().includes(searchTerm.toLowerCase()) ||
         asset.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        asset.specs.toLowerCase().includes(searchTerm.toLowerCase())
+        asset.specs.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (asset.previousOwner && asset.previousOwner.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -132,9 +332,9 @@ function App() {
     setFilteredAssets(filtered);
   }, [assets, searchTerm, selectedCategory, selectedStatus]);
 
-  const handleAddAsset = () => {
-    if (!hasPermission('edit')) {
-      alert('You do not have permission to add assets.');
+  const handleAddAsset = async () => {
+    if (!hasPermission('edit') || !db) {
+      alert('You do not have permission to add assets or database is not available.');
       return;
     }
     
@@ -142,20 +342,30 @@ function App() {
       const asset = {
         ...newAsset,
         id: Date.now(),
-        price: parseFloat(newAsset.price) || 0
+        price: parseFloat(newAsset.price) || 0,
+        transferHistory: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
-      setAssets([...assets, asset]);
-      setNewAsset({
-        custodian: '',
-        serialNumber: '',
-        specs: '',
-        category: 'Laptop',
-        status: 'Active',
-        price: '',
-        previousOwner: ''
-      });
-      setShowAddForm(false);
-      alert('Asset added successfully!');
+      
+      try {
+        await db.addAsset(asset);
+        setAssets([...assets, asset]);
+        setNewAsset({
+          custodian: '',
+          serialNumber: '',
+          specs: '',
+          category: 'Laptop',
+          status: 'Active',
+          price: '',
+          previousOwner: ''
+        });
+        setShowAddForm(false);
+        alert('Asset added successfully to database!');
+      } catch (error) {
+        console.error('Error adding asset:', error);
+        alert('Failed to add asset to database. Please try again.');
+      }
     } else {
       alert('Please fill in all required fields');
     }
@@ -169,78 +379,137 @@ function App() {
     setEditingAsset({ ...asset });
   };
 
-  const handleUpdateAsset = () => {
-    if (!hasPermission('edit')) return;
+  const handleUpdateAsset = async () => {
+    if (!hasPermission('edit') || !db) return;
     
     if (editingAsset) {
-      setAssets(assets.map(asset => 
-        asset.id === editingAsset.id ? editingAsset : asset
-      ));
-      setEditingAsset(null);
-      alert('Asset updated successfully!');
+      const updatedAsset = {
+        ...editingAsset,
+        updatedAt: new Date().toISOString()
+      };
+      
+      try {
+        await db.updateAsset(updatedAsset);
+        setAssets(assets.map(asset => 
+          asset.id === editingAsset.id ? updatedAsset : asset
+        ));
+        setEditingAsset(null);
+        alert('Asset updated successfully in database!');
+      } catch (error) {
+        console.error('Error updating asset:', error);
+        alert('Failed to update asset in database. Please try again.');
+      }
     }
   };
 
-  const handleDeleteAsset = (id) => {
-    if (!hasPermission('edit')) {
-      alert('You do not have permission to delete assets.');
+  const handleDeleteAsset = async (id) => {
+    if (!hasPermission('edit') || !db) {
+      alert('You do not have permission to delete assets or database is not available.');
       return;
     }
     
-    if (window.confirm('Are you sure you want to delete this asset?')) {
-      setAssets(assets.filter(asset => asset.id !== id));
-      alert('Asset deleted successfully!');
+    if (window.confirm('Are you sure you want to delete this asset? This action cannot be undone.')) {
+      try {
+        await db.deleteAsset(id);
+        setAssets(assets.filter(asset => asset.id !== id));
+        alert('Asset deleted successfully from database!');
+      } catch (error) {
+        console.error('Error deleting asset:', error);
+        alert('Failed to delete asset from database. Please try again.');
+      }
     }
   };
 
-  const handleTransferAsset = () => {
-    if (!hasPermission('edit')) return;
+  const handleTransferAsset = async () => {
+    if (!hasPermission('edit') || !db) return;
     
     if (transferAsset && transferData.newCustodian) {
+      // Create transfer history entry
+      const transferEntry = {
+        from: transferAsset.custodian,
+        to: transferData.newCustodian,
+        date: transferData.transferDate,
+        reason: transferData.reason,
+        notes: transferData.notes,
+        transferredBy: users[currentUser].name,
+        timestamp: new Date().toISOString()
+      };
+
       const updatedAsset = {
         ...transferAsset,
         previousOwner: transferAsset.custodian,
         custodian: transferData.newCustodian,
         transferDate: transferData.transferDate,
-        status: 'Active'
+        status: 'Active',
+        transferHistory: [...(transferAsset.transferHistory || []), transferEntry],
+        updatedAt: new Date().toISOString()
       };
       
-      setAssets(assets.map(asset => 
-        asset.id === transferAsset.id ? updatedAsset : asset
-      ));
-      
-      setShowTransferModal(false);
-      setTransferAsset(null);
-      setTransferData({
-        newCustodian: '',
-        transferDate: new Date().toISOString().split('T')[0],
-        notes: ''
-      });
-      alert('Asset transferred successfully!');
+      try {
+        await db.updateAsset(updatedAsset);
+        setAssets(assets.map(asset => 
+          asset.id === transferAsset.id ? updatedAsset : asset
+        ));
+        
+        setShowTransferModal(false);
+        setTransferAsset(null);
+        setTransferData({
+          newCustodian: '',
+          transferDate: new Date().toISOString().split('T')[0],
+          reason: '',
+          notes: ''
+        });
+        alert('Asset transferred successfully and saved to database!');
+      } catch (error) {
+        console.error('Error transferring asset:', error);
+        alert('Failed to transfer asset in database. Please try again.');
+      }
     } else {
       alert('Please enter the new custodian name');
     }
   };
 
-  const handleEmployeeExit = () => {
-    if (!hasPermission('edit')) return;
+  const handleEmployeeExit = async () => {
+    if (!hasPermission('edit') || !db) return;
     
     if (exitingEmployee) {
-      const updatedAssets = assets.map(asset => {
+      const updatedAssets = [];
+      
+      for (const asset of assets) {
         if (asset.custodian === exitingEmployee && asset.status === 'Active') {
-          return {
+          const transferEntry = {
+            from: asset.custodian,
+            to: 'IT Department',
+            date: new Date().toISOString().split('T')[0],
+            reason: 'Employee Exit',
+            notes: 'Asset returned due to employee departure',
+            transferredBy: users[currentUser].name,
+            timestamp: new Date().toISOString()
+          };
+
+          const updatedAsset = {
             ...asset,
             status: 'Returned',
-            transferDate: new Date().toISOString().split('T')[0]
+            transferDate: new Date().toISOString().split('T')[0],
+            transferHistory: [...(asset.transferHistory || []), transferEntry],
+            updatedAt: new Date().toISOString()
           };
+          
+          try {
+            await db.updateAsset(updatedAsset);
+            updatedAssets.push(updatedAsset);
+          } catch (error) {
+            console.error('Error updating asset:', error);
+          }
+        } else {
+          updatedAssets.push(asset);
         }
-        return asset;
-      });
+      }
       
       setAssets(updatedAssets);
       setShowEmployeeExitModal(false);
       setExitingEmployee('');
-      alert(`All assets from ${exitingEmployee} have been marked as returned.`);
+      alert(`All assets from ${exitingEmployee} have been marked as returned and saved to database.`);
     }
   };
 
@@ -255,6 +524,11 @@ function App() {
     return assets.filter(asset => asset.custodian === employeeName && asset.status === 'Active');
   };
 
+  const viewAssetHistory = (asset) => {
+    setSelectedAssetHistory(asset);
+    setShowHistoryModal(true);
+  };
+
   // Excel Export Function
   const exportToExcel = () => {
     try {
@@ -265,7 +539,11 @@ function App() {
         'Category': asset.category || '',
         'Status': asset.status || '',
         'Price (KES)': asset.price || 0,
-        'Previous Owner': asset.previousOwner || ''
+        'Previous Owner': asset.previousOwner || '',
+        'Created Date': asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : '',
+        'Last Updated': asset.updatedAt ? new Date(asset.updatedAt).toLocaleDateString() : '',
+        'Transfer History': asset.transferHistory ? 
+          asset.transferHistory.map(h => `${h.from} → ${h.to} (${h.date})`).join('; ') : ''
       }));
 
       const wb = XLSX.utils.book_new();
@@ -273,7 +551,7 @@ function App() {
       
       const colWidths = [
         { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 12 },
-        { wch: 12 }, { wch: 15 }, { wch: 20 }
+        { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 40 }
       ];
       ws['!cols'] = colWidths;
 
@@ -294,9 +572,12 @@ function App() {
   // CSV Export Function
   const exportToCSV = () => {
     try {
-      const headers = 'Custodian,Serial Number,Specs,Category,Status,Price (KES),Previous Owner\n';
+      const headers = 'Custodian,Serial Number,Specs,Category,Status,Price (KES),Previous Owner,Created Date,Last Updated,Transfer History\n';
       
       const rows = filteredAssets.map(asset => {
+        const transferHistory = asset.transferHistory ? 
+          asset.transferHistory.map(h => `${h.from} → ${h.to} (${h.date})`).join('; ') : '';
+        
         return [
           asset.custodian || '',
           asset.serialNumber || '',
@@ -304,7 +585,10 @@ function App() {
           asset.category || '',
           asset.status || '',
           asset.price || 0,
-          asset.previousOwner || ''
+          asset.previousOwner || '',
+          asset.createdAt ? new Date(asset.createdAt).toLocaleDateString() : '',
+          asset.updatedAt ? new Date(asset.updatedAt).toLocaleDateString() : '',
+          transferHistory.replace(/,/g, ';')
         ].join(',');
       }).join('\n');
       
@@ -339,13 +623,13 @@ function App() {
     input.accept = '.csv,.xlsx,.xls';
     input.style.display = 'none';
     
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
+      if (!file || !db) return;
       
       if (file.name.endsWith('.csv')) {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
           try {
             const text = event.target.result;
             const lines = text.split('\n').filter(line => line.trim());
@@ -355,7 +639,7 @@ function App() {
               return;
             }
             
-            const importedData = [];
+            const importedAssets = [];
             for (let i = 1; i < lines.length; i++) {
               const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
               if (values.length >= 3 && values[0] && values[1]) {
@@ -367,15 +651,24 @@ function App() {
                   category: values[3] || 'Other',
                   status: values[4] || 'Active',
                   price: parseFloat(values[5]) || 0,
-                  previousOwner: values[6] || ''
+                  previousOwner: values[6] || '',
+                  transferHistory: [],
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
                 };
-                importedData.push(asset);
+                
+                try {
+                  await db.addAsset(asset);
+                  importedAssets.push(asset);
+                } catch (error) {
+                  console.error('Error importing asset:', error);
+                }
               }
             }
             
-            if (importedData.length > 0) {
-              setAssets([...assets, ...importedData]);
-              alert(`Successfully imported ${importedData.length} assets from CSV!`);
+            if (importedAssets.length > 0) {
+              setAssets([...assets, ...importedAssets]);
+              alert(`Successfully imported ${importedAssets.length} assets to database!`);
             } else {
               alert('No valid asset data found in the CSV file.');
             }
@@ -387,7 +680,7 @@ function App() {
         reader.readAsText(file);
       } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
           try {
             const data = new Uint8Array(event.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
@@ -401,8 +694,8 @@ function App() {
               return;
             }
             
-            const importedData = [];
-            jsonData.forEach((row, index) => {
+            const importedAssets = [];
+            for (const [index, row] of jsonData.entries()) {
               if (row.Custodian && row['Serial Number']) {
                 const asset = {
                   id: Date.now() + index,
@@ -412,15 +705,24 @@ function App() {
                   category: row.Category || 'Other',
                   status: row.Status || 'Active',
                   price: parseFloat(row['Price (KES)'] || row.Price) || 0,
-                  previousOwner: row['Previous Owner'] || ''
+                  previousOwner: row['Previous Owner'] || '',
+                  transferHistory: [],
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
                 };
-                importedData.push(asset);
+                
+                try {
+                  await db.addAsset(asset);
+                  importedAssets.push(asset);
+                } catch (error) {
+                  console.error('Error importing asset:', error);
+                }
               }
-            });
+            }
             
-            if (importedData.length > 0) {
-              setAssets([...assets, ...importedData]);
-              alert(`Successfully imported ${importedData.length} assets from Excel file!`);
+            if (importedAssets.length > 0) {
+              setAssets([...assets, ...importedAssets]);
+              alert(`Successfully imported ${importedAssets.length} assets to database!`);
             } else {
               alert('No valid asset data found in the Excel file.');
             }
@@ -460,6 +762,41 @@ function App() {
 
   const totalValue = filteredAssets.reduce((sum, asset) => sum + asset.price, 0);
 
+  // Show loading screen while initializing database
+  if (dbStatus === 'initializing') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-cyan-50 to-blue-100 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="flex items-center justify-center mb-4">
+            <Database className="w-16 h-16 text-cyan-600 animate-pulse" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Initializing Database</h2>
+          <p className="text-gray-600">Setting up IndexedDB storage...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (dbStatus === 'error') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-lg p-8 text-center border-red-200 border">
+          <div className="flex items-center justify-center mb-4">
+            <Database className="w-16 h-16 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-red-800 mb-2">Database Error</h2>
+          <p className="text-red-600 mb-4">Failed to initialize IndexedDB. Please refresh the page.</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Login Screen
   if (!isLoggedIn) {
     return (
@@ -478,6 +815,10 @@ function App() {
             </h1>
             <p className="text-gray-500 -mt-1">interactive</p>
             <p className="text-sm text-gray-600 mt-2">IT Asset Management System</p>
+            <div className="flex items-center justify-center mt-2 text-xs text-green-600">
+              <Database className="w-3 h-3 mr-1" />
+              <span>Database Connected</span>
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -575,7 +916,11 @@ function App() {
               <div className="hidden md:block h-8 w-px bg-gray-300"></div>
               <div className="hidden md:block">
                 <h2 className="text-lg font-semibold text-gray-800">IT Asset Management</h2>
-                <p className="text-sm text-gray-500">bean.co.ke</p>
+                <div className="flex items-center text-sm text-gray-500">
+                  <span>bean.co.ke</span>
+                  <Database className="w-3 h-3 ml-2 mr-1 text-green-600" />
+                  <span className="text-green-600">DB Connected</span>
+                </div>
               </div>
             </div>
             
@@ -624,6 +969,10 @@ function App() {
                 <span className="ml-2 text-blue-600 font-medium">(View Only Mode)</span>
               )}
             </p>
+            <div className="flex items-center mt-2 text-sm text-green-600">
+              <Database className="w-4 h-4 mr-1" />
+              <span>All data is automatically saved to IndexedDB</span>
+            </div>
           </div>
         </div>
 
@@ -784,6 +1133,7 @@ function App() {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Price (KES)</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Previous Owner</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">History</th>
                   {hasPermission('edit') && (
                     <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                   )}
@@ -819,7 +1169,23 @@ function App() {
                       {asset.price.toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {asset.previousOwner || '-'}
+                      {asset.previousOwner ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">
+                          {asset.previousOwner}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => viewAssetHistory(asset)}
+                        className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors"
+                        title="View Transfer History"
+                      >
+                        <History className="w-3 h-3" />
+                        {asset.transferHistory?.length || 0}
+                      </button>
                     </td>
                     {hasPermission('edit') && (
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -906,6 +1272,13 @@ function App() {
                   onChange={(e) => setNewAsset({...newAsset, price: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 />
+                <input
+                  type="text"
+                  placeholder="Previous Owner (optional)"
+                  value={newAsset.previousOwner}
+                  onChange={(e) => setNewAsset({...newAsset, previousOwner: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddAsset}
@@ -969,6 +1342,13 @@ function App() {
                   onChange={(e) => setEditingAsset({...editingAsset, price: parseFloat(e.target.value) || 0})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
+                <input
+                  type="text"
+                  placeholder="Previous Owner"
+                  value={editingAsset.previousOwner || ''}
+                  onChange={(e) => setEditingAsset({...editingAsset, previousOwner: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
                 <div className="flex gap-2">
                   <button
                     onClick={handleUpdateAsset}
@@ -1012,8 +1392,15 @@ function App() {
                   onChange={(e) => setTransferData({...transferData, transferDate: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+                <input
+                  type="text"
+                  placeholder="Reason for transfer"
+                  value={transferData.reason}
+                  onChange={(e) => setTransferData({...transferData, reason: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
                 <textarea
-                  placeholder="Transfer notes (optional)"
+                  placeholder="Additional notes (optional)"
                   value={transferData.notes}
                   onChange={(e) => setTransferData({...transferData, notes: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1041,6 +1428,78 @@ function App() {
           </div>
         )}
 
+        {/* Transfer History Modal */}
+        {showHistoryModal && selectedAssetHistory && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-[600px] shadow-lg rounded-xl bg-white">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <div className="p-2 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg mr-3">
+                    <History className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Asset Transfer History</h3>
+                </div>
+                <button
+                  onClick={() => setShowHistoryModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="font-medium">{selectedAssetHistory.specs}</p>
+                <p className="text-sm text-gray-600">Serial: {selectedAssetHistory.serialNumber}</p>
+                <p className="text-sm text-gray-600">Current Custodian: {selectedAssetHistory.custodian}</p>
+                {selectedAssetHistory.createdAt && (
+                  <p className="text-sm text-gray-600">Created: {new Date(selectedAssetHistory.createdAt).toLocaleDateString()}</p>
+                )}
+              </div>
+
+              <div className="max-h-96 overflow-y-auto">
+                {selectedAssetHistory.transferHistory && selectedAssetHistory.transferHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedAssetHistory.transferHistory.map((transfer, index) => (
+                      <div key={index} className="border-l-4 border-blue-500 pl-4 py-2 bg-blue-50 rounded-r-lg">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {transfer.from} → {transfer.to}
+                            </p>
+                            <p className="text-sm text-gray-600">{transfer.reason}</p>
+                            {transfer.notes && (
+                              <p className="text-sm text-gray-500 italic">"{transfer.notes}"</p>
+                            )}
+                          </div>
+                          <div className="text-right text-sm text-gray-500">
+                            <p>{transfer.date}</p>
+                            <p>by {transfer.transferredBy}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <History className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No transfer history available</p>
+                    <p className="text-sm">This asset has not been transferred yet</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-4 pt-4 border-t">
+                <button
+                  onClick={() => setShowHistoryModal(false)}
+                  className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Employee Exit Modal */}
         {showEmployeeExitModal && hasPermission('edit') && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1052,7 +1511,7 @@ function App() {
                 <h3 className="text-lg font-bold text-orange-600">Employee Exit Process</h3>
               </div>
               <p className="text-sm text-gray-600 mb-4">
-                Select the employee who is leaving. This will mark all their assets as Returned.
+                Select the employee who is leaving. This will mark all their assets as Returned and record the transfer history in the database.
               </p>
               <div className="space-y-4">
                 <select
