@@ -1,114 +1,111 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, User, Monitor, Smartphone, HardDrive, ArrowRightLeft, Download, FileUp, UserX, LogOut, Eye, Lock, FileSpreadsheet, History, Database } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, User, Monitor, Smartphone, HardDrive, ArrowRightLeft, Download, FileUp, UserX, LogOut, Eye, Lock, FileSpreadsheet, History, Database, Cloud, Wifi, WifiOff, Settings } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { createClient } from '@supabase/supabase-js';
 
-// IndexedDB helper functions
-class AssetDB {
-  constructor() {
-    this.dbName = 'AssetManagementDB';
-    this.version = 1;
-    this.db = null;
-  }
+// Supabase Configuration
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'https://dtawcnyzmrvccioikbqcz.supabase.co';
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0YXdjbnl6bXJ2Y2Npb2ticWN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI2MzI2MTQsImV4cCI6MjA0ODIwODYxNH0.u3EB-NLxwRVyKGMW-5BZsLvU7QLIgSCJ-xWHEokvWbU';
 
-  async init() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.version);
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve(this.db);
-      };
-      
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result;
-        
-        // Create assets store
-        if (!db.objectStoreNames.contains('assets')) {
-          const assetStore = db.createObjectStore('assets', { keyPath: 'id' });
-          assetStore.createIndex('custodian', 'custodian', { unique: false });
-          assetStore.createIndex('serialNumber', 'serialNumber', { unique: false });
-          assetStore.createIndex('status', 'status', { unique: false });
-        }
-        
-        // Create users store
-        if (!db.objectStoreNames.contains('users')) {
-          const userStore = db.createObjectStore('users', { keyPath: 'username' });
-        }
-      };
-    });
-  }
+// Create Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  async getAllAssets() {
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['assets'], 'readonly');
-      const store = transaction.objectStore('assets');
-      const request = store.getAll();
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
+// Mock data for demo purposes
+const getMockData = (table, operation, data, filters) => {
+  const mockAssets = [
+    { 
+      id: 1, 
+      custodian: 'Trish Syokau', 
+      serial_number: 'D61F4M2', 
+      specifications: 'Dell XPS 13', 
+      category: 'Laptop', 
+      status: 'Active', 
+      price: 86000, 
+      previous_owner: '',
+      transfer_history: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    { 
+      id: 2, 
+      custodian: 'Sharon Wala', 
+      serial_number: '5CG720103X', 
+      specifications: 'HP EliteBook x360 1030 G2', 
+      category: 'Laptop', 
+      status: 'Active', 
+      price: 82000, 
+      previous_owner: 'Cynthia Mumbi',
+      transfer_history: [
+        { from: 'Cynthia Mumbi', to: 'Sharon Wala', date: '2024-01-15', reason: 'Department transfer', transferredBy: 'Administrator' }
+      ],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    { 
+      id: 3, 
+      custodian: 'Jackie Maina', 
+      serial_number: '5CG726102X', 
+      specifications: 'HP-ENVY', 
+      category: 'Laptop', 
+      status: 'Active', 
+      price: 110000, 
+      previous_owner: '',
+      transfer_history: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    { 
+      id: 4, 
+      custodian: 'Francis Kanja', 
+      serial_number: 'G2QG632KVT', 
+      specifications: 'MacBook Pro 16" 18 GB RAM 512 GB', 
+      category: 'Laptop', 
+      status: 'Active', 
+      price: 300000, 
+      previous_owner: '',
+      transfer_history: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    { 
+      id: 5, 
+      custodian: 'Eric', 
+      serial_number: '5CG726102X', 
+      specifications: 'HP-ENVY', 
+      category: 'Laptop', 
+      status: 'Returned', 
+      price: 86000, 
+      previous_owner: '',
+      transfer_history: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  ];
 
-  async addAsset(asset) {
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['assets'], 'readwrite');
-      const store = transaction.objectStore('assets');
-      const request = store.add(asset);
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+  switch (operation) {
+    case 'select':
+      return Promise.resolve({ data: mockAssets, error: null });
+    case 'insert':
+      const newAsset = { ...data, id: Date.now(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      return Promise.resolve({ data: [newAsset], error: null });
+    case 'update':
+      return Promise.resolve({ data: [{ ...data, updated_at: new Date().toISOString() }], error: null });
+    case 'delete':
+      return Promise.resolve({ data: null, error: null });
+    default:
+      return Promise.resolve({ data: [], error: null });
   }
-
-  async updateAsset(asset) {
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['assets'], 'readwrite');
-      const store = transaction.objectStore('assets');
-      const request = store.put(asset);
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async deleteAsset(id) {
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['assets'], 'readwrite');
-      const store = transaction.objectStore('assets');
-      const request = store.delete(id);
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async addUser(user) {
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['users'], 'readwrite');
-      const store = transaction.objectStore('users');
-      const request = store.add(user);
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getUser(username) {
-    return new Promise((resolve, reject) => {
-      const transaction = this.db.transaction(['users'], 'readonly');
-      const store = transaction.objectStore('users');
-      const request = store.get(username);
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-}
+};
 
 function App() {
-  const [db, setDb] = useState(null);
   const [dbStatus, setDbStatus] = useState('initializing');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [supabaseConfig, setSupabaseConfig] = useState({
+    url: SUPABASE_URL,
+    key: SUPABASE_ANON_KEY
+  });
+  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState(true);
   
   // Authentication state
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -142,12 +139,12 @@ function App() {
 
   const [newAsset, setNewAsset] = useState({
     custodian: '',
-    serialNumber: '',
-    specs: '',
+    serial_number: '',
+    specifications: '',
     category: 'Laptop',
     status: 'Active',
     price: '',
-    previousOwner: ''
+    previous_owner: ''
   });
 
   const [transferData, setTransferData] = useState({
@@ -157,100 +154,94 @@ function App() {
     notes: ''
   });
 
-  // Initialize IndexedDB
+  // Monitor online status
   useEffect(() => {
-    const initializeDB = async () => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Initialize Supabase connection
+  useEffect(() => {
+    const initializeDatabase = async () => {
       try {
-        const assetDB = new AssetDB();
-        await assetDB.init();
-        setDb(assetDB);
+        setDbStatus('connecting');
         
-        // Load existing assets from DB
-        const existingAssets = await assetDB.getAllAssets();
+        // Try to fetch assets from Supabase
+        const { data, error } = await supabase.from('assets').select('*');
         
-        if (existingAssets.length === 0) {
-          // If no assets exist, add sample data
-          const sampleAssets = [
-            { 
-              id: 1, 
-              custodian: 'Trish Syokau', 
-              serialNumber: 'D61F4M2', 
-              specs: 'Dell XPS 13', 
-              category: 'Laptop', 
-              status: 'Active', 
-              price: 86000, 
-              previousOwner: '',
-              transferHistory: [],
-              createdAt: new Date().toISOString()
-            },
-            { 
-              id: 2, 
-              custodian: 'Sharon Wala', 
-              serialNumber: '5CG720103X', 
-              specs: 'HP EliteBook x360 1030 G2', 
-              category: 'Laptop', 
-              status: 'Active', 
-              price: 82000, 
-              previousOwner: 'Cynthia Mumbi',
-              transferHistory: [
-                { from: 'Cynthia Mumbi', to: 'Sharon Wala', date: '2024-01-15', reason: 'Department transfer', transferredBy: 'Administrator' }
-              ],
-              createdAt: new Date().toISOString()
-            },
-            { 
-              id: 3, 
-              custodian: 'Jackie Maina', 
-              serialNumber: '5CG726102X', 
-              specs: 'HP-ENVY', 
-              category: 'Laptop', 
-              status: 'Active', 
-              price: 110000, 
-              previousOwner: '',
-              transferHistory: [],
-              createdAt: new Date().toISOString()
-            },
-            { 
-              id: 4, 
-              custodian: 'Francis Kanja', 
-              serialNumber: 'G2QG632KVT', 
-              specs: 'MacBook Pro 16" 18 GB RAM 512 GB', 
-              category: 'Laptop', 
-              status: 'Active', 
-              price: 300000, 
-              previousOwner: '',
-              transferHistory: [],
-              createdAt: new Date().toISOString()
-            },
-            { 
-              id: 5, 
-              custodian: 'Eric', 
-              serialNumber: '5CG726102X', 
-              specs: 'HP-ENVY', 
-              category: 'Laptop', 
-              status: 'Returned', 
-              price: 86000, 
-              previousOwner: '',
-              transferHistory: [],
-              createdAt: new Date().toISOString()
-            }
-          ];
-          
-          for (const asset of sampleAssets) {
-            await assetDB.addAsset(asset);
-          }
-          setAssets(sampleAssets);
-        } else {
-          setAssets(existingAssets);
+        if (error) {
+          console.error('Supabase error:', error);
+          // Fall back to demo mode with mock data
+          setDbStatus('demo_mode');
+          setIsSupabaseConfigured(false);
+          const mockResult = await getMockData('assets', 'select');
+          const formattedAssets = mockResult.data.map(asset => ({
+            id: asset.id,
+            custodian: asset.custodian,
+            serialNumber: asset.serial_number,
+            specs: asset.specifications,
+            category: asset.category,
+            status: asset.status,
+            price: asset.price,
+            previousOwner: asset.previous_owner,
+            transferHistory: asset.transfer_history || [],
+            createdAt: asset.created_at,
+            updatedAt: asset.updated_at
+          }));
+          setAssets(formattedAssets);
+          return;
         }
+
+        // Successfully connected to Supabase
+        const formattedAssets = data.map(asset => ({
+          id: asset.id,
+          custodian: asset.custodian,
+          serialNumber: asset.serial_number,
+          specs: asset.specifications,
+          category: asset.category,
+          status: asset.status,
+          price: asset.price,
+          previousOwner: asset.previous_owner,
+          transferHistory: asset.transfer_history || [],
+          createdAt: asset.created_at,
+          updatedAt: asset.updated_at
+        }));
         
+        setAssets(formattedAssets);
         setDbStatus('connected');
+        setIsSupabaseConfigured(true);
       } catch (error) {
-        console.error('Database initialization failed:', error);
+        console.error('Database connection failed:', error);
         setDbStatus('error');
+        setIsSupabaseConfigured(false);
+        // Load mock data as fallback
+        const mockResult = await getMockData('assets', 'select');
+        const formattedAssets = mockResult.data.map(asset => ({
+          id: asset.id,
+          custodian: asset.custodian,
+          serialNumber: asset.serial_number,
+          specs: asset.specifications,
+          category: asset.category,
+          status: asset.status,
+          price: asset.price,
+          previousOwner: asset.previous_owner,
+          transferHistory: asset.transfer_history || [],
+          createdAt: asset.created_at,
+          updatedAt: asset.updated_at
+        }));
+        setAssets(formattedAssets);
       }
     };
 
-    initializeDB();
+    initializeDatabase();
   }, []);
 
   // Login function
@@ -333,35 +324,60 @@ function App() {
   }, [assets, searchTerm, selectedCategory, selectedStatus]);
 
   const handleAddAsset = async () => {
-    if (!hasPermission('edit') || !db) {
-      alert('You do not have permission to add assets or database is not available.');
+    if (!hasPermission('edit')) {
+      alert('You do not have permission to add assets.');
       return;
     }
     
-    if (newAsset.custodian && newAsset.serialNumber && newAsset.specs) {
-      const asset = {
-        ...newAsset,
-        id: Date.now(),
+    if (newAsset.custodian && newAsset.serial_number && newAsset.specifications) {
+      const assetData = {
+        custodian: newAsset.custodian,
+        serial_number: newAsset.serial_number,
+        specifications: newAsset.specifications,
+        category: newAsset.category,
+        status: newAsset.status,
         price: parseFloat(newAsset.price) || 0,
-        transferHistory: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        previous_owner: newAsset.previous_owner,
+        transfer_history: []
       };
       
       try {
-        await db.addAsset(asset);
-        setAssets([...assets, asset]);
+        let result;
+        if (isSupabaseConfigured) {
+          const { data, error } = await supabase.from('assets').insert([assetData]).select();
+          if (error) throw error;
+          result = data;
+        } else {
+          const mockResult = await getMockData('assets', 'insert', assetData);
+          result = mockResult.data;
+        }
+        
+        const newAssetFormatted = {
+          id: result[0].id,
+          custodian: result[0].custodian,
+          serialNumber: result[0].serial_number,
+          specs: result[0].specifications,
+          category: result[0].category,
+          status: result[0].status,
+          price: result[0].price,
+          previousOwner: result[0].previous_owner,
+          transferHistory: result[0].transfer_history || [],
+          createdAt: result[0].created_at,
+          updatedAt: result[0].updated_at
+        };
+        
+        setAssets([...assets, newAssetFormatted]);
         setNewAsset({
           custodian: '',
-          serialNumber: '',
-          specs: '',
+          serial_number: '',
+          specifications: '',
           category: 'Laptop',
           status: 'Active',
           price: '',
-          previousOwner: ''
+          previous_owner: ''
         });
         setShowAddForm(false);
-        alert('Asset added successfully to database!');
+        alert(`Asset added successfully ${isSupabaseConfigured ? 'to Supabase database' : 'in demo mode'}!`);
       } catch (error) {
         console.error('Error adding asset:', error);
         alert('Failed to add asset to database. Please try again.');
@@ -380,21 +396,55 @@ function App() {
   };
 
   const handleUpdateAsset = async () => {
-    if (!hasPermission('edit') || !db) return;
+    if (!hasPermission('edit')) return;
     
     if (editingAsset) {
-      const updatedAsset = {
-        ...editingAsset,
-        updatedAt: new Date().toISOString()
+      const updateData = {
+        custodian: editingAsset.custodian,
+        serial_number: editingAsset.serialNumber,
+        specifications: editingAsset.specs,
+        category: editingAsset.category,
+        status: editingAsset.status,
+        price: editingAsset.price,
+        previous_owner: editingAsset.previousOwner,
+        transfer_history: editingAsset.transferHistory,
+        updated_at: new Date().toISOString()
       };
       
       try {
-        await db.updateAsset(updatedAsset);
+        let result;
+        if (isSupabaseConfigured) {
+          const { data, error } = await supabase
+            .from('assets')
+            .update(updateData)
+            .eq('id', editingAsset.id)
+            .select();
+          if (error) throw error;
+          result = data;
+        } else {
+          const mockResult = await getMockData('assets', 'update', {...updateData, id: editingAsset.id});
+          result = mockResult.data;
+        }
+        
+        const updatedAssetFormatted = {
+          id: result[0].id || editingAsset.id,
+          custodian: result[0].custodian,
+          serialNumber: result[0].serial_number,
+          specs: result[0].specifications,
+          category: result[0].category,
+          status: result[0].status,
+          price: result[0].price,
+          previousOwner: result[0].previous_owner,
+          transferHistory: result[0].transfer_history || [],
+          createdAt: result[0].created_at || editingAsset.createdAt,
+          updatedAt: result[0].updated_at
+        };
+        
         setAssets(assets.map(asset => 
-          asset.id === editingAsset.id ? updatedAsset : asset
+          asset.id === editingAsset.id ? updatedAssetFormatted : asset
         ));
         setEditingAsset(null);
-        alert('Asset updated successfully in database!');
+        alert(`Asset updated successfully ${isSupabaseConfigured ? 'in Supabase database' : 'in demo mode'}!`);
       } catch (error) {
         console.error('Error updating asset:', error);
         alert('Failed to update asset in database. Please try again.');
@@ -403,16 +453,22 @@ function App() {
   };
 
   const handleDeleteAsset = async (id) => {
-    if (!hasPermission('edit') || !db) {
-      alert('You do not have permission to delete assets or database is not available.');
+    if (!hasPermission('edit')) {
+      alert('You do not have permission to delete assets.');
       return;
     }
     
     if (window.confirm('Are you sure you want to delete this asset? This action cannot be undone.')) {
       try {
-        await db.deleteAsset(id);
+        if (isSupabaseConfigured) {
+          const { error } = await supabase.from('assets').delete().eq('id', id);
+          if (error) throw error;
+        } else {
+          await getMockData('assets', 'delete', id);
+        }
+        
         setAssets(assets.filter(asset => asset.id !== id));
-        alert('Asset deleted successfully from database!');
+        alert(`Asset deleted successfully ${isSupabaseConfigured ? 'from Supabase database' : 'in demo mode'}!`);
       } catch (error) {
         console.error('Error deleting asset:', error);
         alert('Failed to delete asset from database. Please try again.');
@@ -421,7 +477,7 @@ function App() {
   };
 
   const handleTransferAsset = async () => {
-    if (!hasPermission('edit') || !db) return;
+    if (!hasPermission('edit')) return;
     
     if (transferAsset && transferData.newCustodian) {
       // Create transfer history entry
@@ -435,20 +491,49 @@ function App() {
         timestamp: new Date().toISOString()
       };
 
-      const updatedAsset = {
-        ...transferAsset,
-        previousOwner: transferAsset.custodian,
+      const updateData = {
         custodian: transferData.newCustodian,
-        transferDate: transferData.transferDate,
+        serial_number: transferAsset.serialNumber,
+        specifications: transferAsset.specs,
+        category: transferAsset.category,
         status: 'Active',
-        transferHistory: [...(transferAsset.transferHistory || []), transferEntry],
-        updatedAt: new Date().toISOString()
+        price: transferAsset.price,
+        previous_owner: transferAsset.custodian,
+        transfer_history: [...(transferAsset.transferHistory || []), transferEntry],
+        updated_at: new Date().toISOString()
       };
       
       try {
-        await db.updateAsset(updatedAsset);
+        let result;
+        if (isSupabaseConfigured) {
+          const { data, error } = await supabase
+            .from('assets')
+            .update(updateData)
+            .eq('id', transferAsset.id)
+            .select();
+          if (error) throw error;
+          result = data;
+        } else {
+          const mockResult = await getMockData('assets', 'update', {...updateData, id: transferAsset.id});
+          result = mockResult.data;
+        }
+        
+        const updatedAssetFormatted = {
+          id: result[0].id || transferAsset.id,
+          custodian: result[0].custodian,
+          serialNumber: result[0].serial_number,
+          specs: result[0].specifications,
+          category: result[0].category,
+          status: result[0].status,
+          price: result[0].price,
+          previousOwner: result[0].previous_owner,
+          transferHistory: result[0].transfer_history || [],
+          createdAt: result[0].created_at || transferAsset.createdAt,
+          updatedAt: result[0].updated_at
+        };
+        
         setAssets(assets.map(asset => 
-          asset.id === transferAsset.id ? updatedAsset : asset
+          asset.id === transferAsset.id ? updatedAssetFormatted : asset
         ));
         
         setShowTransferModal(false);
@@ -459,7 +544,7 @@ function App() {
           reason: '',
           notes: ''
         });
-        alert('Asset transferred successfully and saved to database!');
+        alert(`Asset transferred successfully ${isSupabaseConfigured ? 'and saved to Supabase database' : 'in demo mode'}!`);
       } catch (error) {
         console.error('Error transferring asset:', error);
         alert('Failed to transfer asset in database. Please try again.');
@@ -470,7 +555,7 @@ function App() {
   };
 
   const handleEmployeeExit = async () => {
-    if (!hasPermission('edit') || !db) return;
+    if (!hasPermission('edit')) return;
     
     if (exitingEmployee) {
       const updatedAssets = [];
@@ -487,19 +572,49 @@ function App() {
             timestamp: new Date().toISOString()
           };
 
-          const updatedAsset = {
-            ...asset,
+          const updateData = {
+            id: asset.id,
+            custodian: asset.custodian,
+            serial_number: asset.serialNumber,
+            specifications: asset.specs,
+            category: asset.category,
             status: 'Returned',
-            transferDate: new Date().toISOString().split('T')[0],
-            transferHistory: [...(asset.transferHistory || []), transferEntry],
-            updatedAt: new Date().toISOString()
+            price: asset.price,
+            previous_owner: asset.previousOwner,
+            transfer_history: [...(asset.transferHistory || []), transferEntry]
           };
           
           try {
-            await db.updateAsset(updatedAsset);
-            updatedAssets.push(updatedAsset);
+            let result;
+            if (isSupabaseConfigured) {
+              const { data, error } = await supabase
+                .from('assets')
+                .update(updateData)
+                .eq('id', asset.id)
+                .select();
+              if (error) throw error;
+              result = data;
+            } else {
+              const mockResult = await getMockData('assets', 'update', {...updateData, id: asset.id});
+              result = mockResult.data;
+            }
+            
+            updatedAssets.push({
+              id: result[0].id || asset.id,
+              custodian: result[0].custodian,
+              serialNumber: result[0].serial_number,
+              specs: result[0].specifications,
+              category: result[0].category,
+              status: result[0].status,
+              price: result[0].price,
+              previousOwner: result[0].previous_owner,
+              transferHistory: result[0].transfer_history || [],
+              createdAt: result[0].created_at || asset.createdAt,
+              updatedAt: result[0].updated_at
+            });
           } catch (error) {
             console.error('Error updating asset:', error);
+            updatedAssets.push(asset); // Keep original if update fails
           }
         } else {
           updatedAssets.push(asset);
@@ -509,7 +624,7 @@ function App() {
       setAssets(updatedAssets);
       setShowEmployeeExitModal(false);
       setExitingEmployee('');
-      alert(`All assets from ${exitingEmployee} have been marked as returned and saved to database.`);
+      alert(`All assets from ${exitingEmployee} have been marked as returned ${isSupabaseConfigured ? 'and saved to Supabase database' : 'in demo mode'}.`);
     }
   };
 
@@ -625,7 +740,7 @@ function App() {
     
     input.onchange = async (e) => {
       const file = e.target.files[0];
-      if (!file || !db) return;
+      if (!file) return;
       
       if (file.name.endsWith('.csv')) {
         const reader = new FileReader();
@@ -643,23 +758,41 @@ function App() {
             for (let i = 1; i < lines.length; i++) {
               const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
               if (values.length >= 3 && values[0] && values[1]) {
-                const asset = {
-                  id: Date.now() + i,
+                const assetData = {
                   custodian: values[0] || 'Unknown',
-                  serialNumber: values[1] || `IMPORT-${Date.now()}-${i}`,
-                  specs: values[2] || 'Imported Asset',
+                  serial_number: values[1] || `IMPORT-${Date.now()}-${i}`,
+                  specifications: values[2] || 'Imported Asset',
                   category: values[3] || 'Other',
                   status: values[4] || 'Active',
                   price: parseFloat(values[5]) || 0,
-                  previousOwner: values[6] || '',
-                  transferHistory: [],
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString()
+                  previous_owner: values[6] || '',
+                  transfer_history: []
                 };
                 
                 try {
-                  await db.addAsset(asset);
-                  importedAssets.push(asset);
+                  let result;
+                  if (isSupabaseConfigured) {
+                    const { data, error } = await supabase.from('assets').insert([assetData]).select();
+                    if (error) throw error;
+                    result = data;
+                  } else {
+                    const mockResult = await getMockData('assets', 'insert', assetData);
+                    result = mockResult.data;
+                  }
+                  
+                  importedAssets.push({
+                    id: result[0].id,
+                    custodian: result[0].custodian,
+                    serialNumber: result[0].serial_number,
+                    specs: result[0].specifications,
+                    category: result[0].category,
+                    status: result[0].status,
+                    price: result[0].price,
+                    previousOwner: result[0].previous_owner,
+                    transferHistory: result[0].transfer_history || [],
+                    createdAt: result[0].created_at,
+                    updatedAt: result[0].updated_at
+                  });
                 } catch (error) {
                   console.error('Error importing asset:', error);
                 }
@@ -668,7 +801,7 @@ function App() {
             
             if (importedAssets.length > 0) {
               setAssets([...assets, ...importedAssets]);
-              alert(`Successfully imported ${importedAssets.length} assets to database!`);
+              alert(`Successfully imported ${importedAssets.length} assets ${isSupabaseConfigured ? 'to Supabase database' : 'in demo mode'}!`);
             } else {
               alert('No valid asset data found in the CSV file.');
             }
@@ -697,23 +830,41 @@ function App() {
             const importedAssets = [];
             for (const [index, row] of jsonData.entries()) {
               if (row.Custodian && row['Serial Number']) {
-                const asset = {
-                  id: Date.now() + index,
+                const assetData = {
                   custodian: row.Custodian || 'Unknown',
-                  serialNumber: row['Serial Number'] || `IMPORT-${Date.now()}-${index}`,
-                  specs: row.Specifications || row.Specs || 'Imported Asset',
+                  serial_number: row['Serial Number'] || `IMPORT-${Date.now()}-${index}`,
+                  specifications: row.Specifications || row.Specs || 'Imported Asset',
                   category: row.Category || 'Other',
                   status: row.Status || 'Active',
                   price: parseFloat(row['Price (KES)'] || row.Price) || 0,
-                  previousOwner: row['Previous Owner'] || '',
-                  transferHistory: [],
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString()
+                  previous_owner: row['Previous Owner'] || '',
+                  transfer_history: []
                 };
                 
                 try {
-                  await db.addAsset(asset);
-                  importedAssets.push(asset);
+                  let result;
+                  if (isSupabaseConfigured) {
+                    const { data, error } = await supabase.from('assets').insert([assetData]).select();
+                    if (error) throw error;
+                    result = data;
+                  } else {
+                    const mockResult = await getMockData('assets', 'insert', assetData);
+                    result = mockResult.data;
+                  }
+                  
+                  importedAssets.push({
+                    id: result[0].id,
+                    custodian: result[0].custodian,
+                    serialNumber: result[0].serial_number,
+                    specs: result[0].specifications,
+                    category: result[0].category,
+                    status: result[0].status,
+                    price: result[0].price,
+                    previousOwner: result[0].previous_owner,
+                    transferHistory: result[0].transfer_history || [],
+                    createdAt: result[0].created_at,
+                    updatedAt: result[0].updated_at
+                  });
                 } catch (error) {
                   console.error('Error importing asset:', error);
                 }
@@ -722,7 +873,7 @@ function App() {
             
             if (importedAssets.length > 0) {
               setAssets([...assets, ...importedAssets]);
-              alert(`Successfully imported ${importedAssets.length} assets to database!`);
+              alert(`Successfully imported ${importedAssets.length} assets ${isSupabaseConfigured ? 'to Supabase database' : 'in demo mode'}!`);
             } else {
               alert('No valid asset data found in the Excel file.');
             }
@@ -760,38 +911,57 @@ function App() {
     }
   };
 
+  const getDbStatusIcon = () => {
+    if (!isOnline) return <WifiOff className="w-4 h-4 text-red-600" />;
+    
+    switch (dbStatus) {
+      case 'connected':
+        return <Cloud className="w-4 h-4 text-green-600" />;
+      case 'demo_mode':
+        return <Database className="w-4 h-4 text-orange-600" />;
+      case 'connecting':
+        return <Wifi className="w-4 h-4 text-blue-600 animate-pulse" />;
+      case 'error':
+        return <WifiOff className="w-4 h-4 text-red-600" />;
+      default:
+        return <Database className="w-4 h-4 text-gray-600" />;
+    }
+  };
+
+  const getDbStatusText = () => {
+    if (!isOnline) return 'Offline';
+    
+    switch (dbStatus) {
+      case 'connected':
+        return 'Supabase Connected';
+      case 'demo_mode':
+        return 'Demo Mode';
+      case 'connecting':
+        return 'Connecting...';
+      case 'error':
+        return 'Connection Error';
+      default:
+        return 'Initializing...';
+    }
+  };
+
   const totalValue = filteredAssets.reduce((sum, asset) => sum + asset.price, 0);
 
   // Show loading screen while initializing database
-  if (dbStatus === 'initializing') {
+  if (dbStatus === 'initializing' || dbStatus === 'connecting') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-cyan-50 to-blue-100 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-lg p-8 text-center">
           <div className="flex items-center justify-center mb-4">
-            <Database className="w-16 h-16 text-cyan-600 animate-pulse" />
+            <Cloud className="w-16 h-16 text-cyan-600 animate-pulse" />
           </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Initializing Database</h2>
-          <p className="text-gray-600">Setting up IndexedDB storage...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (dbStatus === 'error') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center">
-        <div className="bg-white rounded-xl shadow-lg p-8 text-center border-red-200 border">
-          <div className="flex items-center justify-center mb-4">
-            <Database className="w-16 h-16 text-red-600" />
-          </div>
-          <h2 className="text-xl font-bold text-red-800 mb-2">Database Error</h2>
-          <p className="text-red-600 mb-4">Failed to initialize IndexedDB. Please refresh the page.</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
-            Refresh Page
-          </button>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Connecting to Supabase</h2>
+          <p className="text-gray-600">Establishing database connection...</p>
+          {!isSupabaseConfigured && (
+            <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <p className="text-sm text-orange-700">Running in demo mode - configure Supabase to enable cloud database</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -815,9 +985,11 @@ function App() {
             </h1>
             <p className="text-gray-500 -mt-1">interactive</p>
             <p className="text-sm text-gray-600 mt-2">IT Asset Management System</p>
-            <div className="flex items-center justify-center mt-2 text-xs text-green-600">
-              <Database className="w-3 h-3 mr-1" />
-              <span>Database Connected</span>
+            <div className="flex items-center justify-center mt-2 text-xs">
+              {getDbStatusIcon()}
+              <span className={`ml-1 ${dbStatus === 'connected' ? 'text-green-600' : dbStatus === 'demo_mode' ? 'text-orange-600' : 'text-red-600'}`}>
+                {getDbStatusText()}
+              </span>
             </div>
           </div>
 
@@ -876,13 +1048,30 @@ function App() {
                 👁️ Login as HR (View Only)
               </button>
             </div>
-          </div>
 
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Demo Credentials:</h3>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p><strong>Admin:</strong> admin / admin123</p>
-              <p><strong>HR (View Only):</strong> hr / hr123</p>
+            {dbStatus === 'demo_mode' && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-orange-800">Demo Mode Active</h3>
+                  <button
+                    onClick={() => setShowSetupModal(true)}
+                    className="text-xs text-orange-700 hover:text-orange-900 underline"
+                  >
+                    Setup Supabase
+                  </button>
+                </div>
+                <p className="text-xs text-orange-700">
+                  Currently using mock data. Configure Supabase for cloud database functionality.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Demo Credentials:</h3>
+              <div className="text-xs text-gray-600 space-y-1">
+                <p><strong>Admin:</strong> admin / admin123</p>
+                <p><strong>HR (View Only):</strong> hr / hr123</p>
+              </div>
             </div>
           </div>
         </div>
@@ -918,8 +1107,10 @@ function App() {
                 <h2 className="text-lg font-semibold text-gray-800">IT Asset Management</h2>
                 <div className="flex items-center text-sm text-gray-500">
                   <span>bean.co.ke</span>
-                  <Database className="w-3 h-3 ml-2 mr-1 text-green-600" />
-                  <span className="text-green-600">DB Connected</span>
+                  {getDbStatusIcon()}
+                  <span className={`ml-1 ${dbStatus === 'connected' ? 'text-green-600' : dbStatus === 'demo_mode' ? 'text-orange-600' : 'text-red-600'}`}>
+                    {getDbStatusText()}
+                  </span>
                 </div>
               </div>
             </div>
@@ -943,6 +1134,16 @@ function App() {
                 </p>
                 <p className="text-xs text-cyan-600 font-medium">Asset Management System</p>
               </div>
+              {dbStatus === 'demo_mode' && userRole === 'admin' && (
+                <button
+                  onClick={() => setShowSetupModal(true)}
+                  className="flex items-center gap-2 px-3 py-2 text-orange-600 hover:text-orange-800 hover:bg-orange-50 rounded-lg transition-colors"
+                  title="Setup Supabase"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">Setup DB</span>
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
@@ -969,9 +1170,13 @@ function App() {
                 <span className="ml-2 text-blue-600 font-medium">(View Only Mode)</span>
               )}
             </p>
-            <div className="flex items-center mt-2 text-sm text-green-600">
-              <Database className="w-4 h-4 mr-1" />
-              <span>All data is automatically saved to IndexedDB</span>
+            <div className="flex items-center mt-2 text-sm">
+              {getDbStatusIcon()}
+              <span className={`ml-1 ${dbStatus === 'connected' ? 'text-green-600' : dbStatus === 'demo_mode' ? 'text-orange-600' : 'text-red-600'}`}>
+                {dbStatus === 'connected' && 'All data synced with Supabase cloud database'}
+                {dbStatus === 'demo_mode' && 'Running in demo mode with mock data'}
+                {dbStatus === 'error' && 'Database connection error - using cached data'}
+              </span>
             </div>
           </div>
         </div>
@@ -1224,6 +1429,118 @@ function App() {
           </div>
         </div>
 
+        {/* Supabase Setup Modal */}
+        {showSetupModal && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-[600px] shadow-lg rounded-xl bg-white border-blue-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <div className="p-2 bg-gradient-to-r from-cyan-100 to-blue-100 rounded-lg mr-3">
+                    <Cloud className="w-6 h-6 text-cyan-600" />
+                  </div>
+                  <h3 className="text-lg font-bold bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">Setup Supabase Database</h3>
+                </div>
+                <button
+                  onClick={() => setShowSetupModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-800 mb-2">Quick Setup Instructions:</h4>
+                  <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Go to <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-900">supabase.com</a> and create a free account</li>
+                    <li>Create a new project</li>
+                    <li>Go to Settings → API in your Supabase dashboard</li>
+                    <li>Copy your Project URL and anon public key</li>
+                    <li>Run the SQL commands below in your SQL Editor</li>
+                    <li>Paste your credentials here</li>
+                  </ol>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-800 mb-2">Required SQL Setup:</h4>
+                  <pre className="text-xs bg-gray-800 text-green-400 p-3 rounded overflow-x-auto">
+{`-- Create assets table
+CREATE TABLE assets (
+  id BIGSERIAL PRIMARY KEY,
+  custodian TEXT NOT NULL,
+  serial_number TEXT NOT NULL,
+  specifications TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Other',
+  status TEXT NOT NULL DEFAULT 'Active',
+  price DECIMAL(10,2) DEFAULT 0,
+  previous_owner TEXT,
+  transfer_history JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable Row Level Security (optional)
+ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
+
+-- Create policy to allow all operations (for demo)
+CREATE POLICY "Allow all operations" ON assets FOR ALL USING (true);`}
+                  </pre>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Supabase Project URL</label>
+                    <input
+                      type="url"
+                      value={supabaseConfig.url}
+                      onChange={(e) => setSupabaseConfig({...supabaseConfig, url: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      placeholder="https://your-project.supabase.co"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Supabase Anon Key</label>
+                    <input
+                      type="password"
+                      value={supabaseConfig.key}
+                      onChange={(e) => setSupabaseConfig({...supabaseConfig, key: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <p className="text-sm text-orange-700">
+                    <strong>Note:</strong> For production use, store these credentials securely as environment variables. 
+                    This demo stores them in the component state for simplicity.
+                  </p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      // In a real app, you'd store these securely and reinitialize the connection
+                      alert('In a real implementation, these credentials would be stored securely and the database connection would be reinitialized. For this demo, please modify the SUPABASE_URL and SUPABASE_ANON_KEY constants in the code.');
+                      setShowSetupModal(false);
+                    }}
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg hover:from-cyan-700 hover:to-blue-700 transition-all duration-200"
+                  >
+                    Save Configuration
+                  </button>
+                  <button
+                    onClick={() => setShowSetupModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Add Asset Modal */}
         {showAddForm && hasPermission('edit') && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1245,15 +1562,15 @@ function App() {
                 <input
                   type="text"
                   placeholder="Serial Number"
-                  value={newAsset.serialNumber}
-                  onChange={(e) => setNewAsset({...newAsset, serialNumber: e.target.value})}
+                  value={newAsset.serial_number}
+                  onChange={(e) => setNewAsset({...newAsset, serial_number: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 />
                 <input
                   type="text"
                   placeholder="Specifications"
-                  value={newAsset.specs}
-                  onChange={(e) => setNewAsset({...newAsset, specs: e.target.value})}
+                  value={newAsset.specifications}
+                  onChange={(e) => setNewAsset({...newAsset, specifications: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 />
                 <select
@@ -1275,8 +1592,8 @@ function App() {
                 <input
                   type="text"
                   placeholder="Previous Owner (optional)"
-                  value={newAsset.previousOwner}
-                  onChange={(e) => setNewAsset({...newAsset, previousOwner: e.target.value})}
+                  value={newAsset.previous_owner}
+                  onChange={(e) => setNewAsset({...newAsset, previous_owner: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 />
                 <div className="flex gap-2">
@@ -1511,7 +1828,7 @@ function App() {
                 <h3 className="text-lg font-bold text-orange-600">Employee Exit Process</h3>
               </div>
               <p className="text-sm text-gray-600 mb-4">
-                Select the employee who is leaving. This will mark all their assets as Returned and record the transfer history in the database.
+                Select the employee who is leaving. This will mark all their assets as Returned and record the transfer history in the Supabase database.
               </p>
               <div className="space-y-4">
                 <select
